@@ -1,0 +1,77 @@
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: registry-svc
+  labels:
+    {{- include "registry-proxy.labels" . | nindent 4 }}
+spec:
+  hosts:
+    - {{.Values.registry.domain}}
+  addresses:
+    - {{.Values.registry.host}}
+  location: MESH_EXTERNAL
+  ports:
+    - number: 5000
+      name: http
+      protocol: HTTP
+  resolution: STATIC
+  endpoints:
+    - address: {{.Values.registry.host}}
+      ports:
+        http: {{.Values.registry.port}}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: registry-gateway
+  labels:
+    {{- include "registry-proxy.labels" . | nindent 4 }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: registry-proxy-vs
+  labels:
+    {{- include "registry-proxy.labels" . | nindent 4 }}
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - registry-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /v2
+          method:
+            regex: "GET|PUT|POST|HEAD|OPTIONS|PATCH|DELETE"
+      route:
+        - destination:
+            host: {{.Values.registry.domain}}
+            port:
+              number: {{.Values.registry.port}}
+
+---
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: registry-gateway
+  labels:
+    {{- include "registry-proxy.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      istio: ingressgateway
+  url: oci://sealos.hub:5000/oci/wasm-auth:v2
+  imagePullPolicy: Always
+  imagePullSecret: {{ include "registry-proxy.fullname" . }}
+  phase: AUTHN

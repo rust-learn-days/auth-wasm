@@ -1,0 +1,32 @@
+# Default values for registry-proxy.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+auth:
+  domain: user-manage.lmp-system.svc.cluster.local
+  port: 8084
+  rewritePath: /userauth
+  path: /v2/
+  method: "GET"
+
+authz:
+  domain: user-manage.lmp-system.svc.cluster.local
+  port: 8084
+  rewritePath: /getuserRole
+  path: /v3/authz
+  method: "GET"
+
+image:
+  domain: platform-manage.lmp-system.svc.cluster.local
+  port: 8084
+  rewritePath: /image/updateRegistry
+  path: /v3/image
+  method: "POST"
+
+registry:
+  domain: sealos.hub
+  host: 127.0.0.1
+  port: 5000
+  username: admin
+  password: passw0rd

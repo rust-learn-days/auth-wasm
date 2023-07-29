@@ -1,0 +1,4 @@
+1. Verfiy registry proxy settings:
+	export NODE_PORT=$(kubectl get svc -n  istio-system istio-ingressgateway -o jsonpath='{range .spec.ports[?(@.name=="http2")]}{.nodePort}{end}')
+    export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+	curl -X GET -H "Authorization: Basic {{ printf "%s:%s" .Values.registry.username .Values.registry.password | b64enc }}"  ${NODE_IP}:${NODE_PORT}/v2/

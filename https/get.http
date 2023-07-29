@@ -1,0 +1,9 @@
+## get
+GET http://192.168.64.179:30546/v2/
+Authorization: Basic YWRtaW46cGFzc3cwcmQ=
+
+
+
+### GET request with a header
+GET http://192.168.64.179:5000/v2/
+Accept: application/json

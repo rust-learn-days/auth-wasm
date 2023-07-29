@@ -52,8 +52,9 @@ impl HttpContext for HttpHeaders {
         // 未通过Basic认证或用户名密码不匹配，返回401 Unauthorized
         self.send_http_response(
             401,
-            vec![("WWW-Authenticate", "Basic realm=\"Registry Realm\""),("Docker-Distribution-Api-Version","registry/2.0")],
+            vec![("WWW-Authenticate", "Basic realm=\"Registry Realm\""),("Docker-Distribution-Api-Version","registry/2.0"),("Content-Type","application/json; charset=utf-8")],
             Some(body.as_ref()),
+
         );
         Action::Pause
     }
@@ -93,8 +94,9 @@ fn extract_basic_auth_credentials(auth_header: &str) -> Option<(&'static str, &'
 // 将账号和密码合并为基本认证凭据的 base64 编码形式
 fn encode_basic_auth_credentials(username: &str, password: &str) -> String {
     let credentials = format!("{}:{}", username, password);
-    base64::encode(credentials)
+    format!("{} {}", "Basic", base64::encode(credentials))
 }
+
 
 // 定义基本认证函数
 fn response_401_body() -> String {
