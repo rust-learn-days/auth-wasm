@@ -30,33 +30,38 @@ impl Context for HttpHeaders {}
 
 impl HttpContext for HttpHeaders {
     fn on_http_request_headers(&mut self, _: usize, _: bool) -> Action {
-        // 获取请求头中的Authorization字段，该字段包含Basic认证凭据
-        if let Some(auth_header) = self.get_http_request_header("Authorization") {
-            // 检查Basic认证凭据是否合法（用户名和密码是否匹配）
-            if let Some(credentials) = extract_basic_auth_credentials(&auth_header) {
-                let (username, password) = credentials;
-                // 验证用户名和密码是否为"user"和"user123"
-                if username == "user" && password == "user123" {
-                    // 符合条件，继续执行请求处理
-                    for (name, value) in &self.get_http_request_headers() {
-                        info!("#{} -> {}: {}", self.context_id, name, value);
+        if let Some(path) = self.get_http_request_header(":path")  {
+            if path.starts_with("/v2") ||  path.starts_with("/v3") {
+                // 获取请求头中的Authorization字段，该字段包含Basic认证凭据
+                if let Some(auth_header) = self.get_http_request_header("Authorization") {
+                    // 检查Basic认证凭据是否合法（用户名和密码是否匹配）
+                    if let Some(credentials) = extract_basic_auth_credentials(&auth_header) {
+                        let (username, password) = credentials;
+                        // 验证用户名和密码是否为"user"和"user123"
+                        if username == "user" && password == "user123" {
+                            // 符合条件，继续执行请求处理
+                            for (name, value) in &self.get_http_request_headers() {
+                                info!("#{} -> {}: {}", self.context_id, name, value);
+                            }
+                            let auth_header = encode_basic_auth_credentials("admin", "passw0rd");
+                            self.set_http_request_header("X-AUTH-WASM", Some("wasm32-wasi"));
+                            self.set_http_request_header("Authorization",Some(&auth_header));
+                            return Action::Continue;
+                        }
                     }
-                    let auth_header = encode_basic_auth_credentials("admin", "passw0rd");
-                    self.set_http_request_header("X-AUTH-WASM", Some("wasm32-wasi"));
-                    self.set_http_request_header("Authorization",Some(&auth_header));
-                    return Action::Continue;
                 }
+                let body: &str = &response_401_body();
+                // 未通过Basic认证或用户名密码不匹配，返回401 Unauthorized
+                self.send_http_response(
+                    401,
+                    vec![("WWW-Authenticate", "Basic realm=\"Registry Realm\""),("Docker-Distribution-Api-Version","registry/2.0"),("Content-Type","application/json; charset=utf-8")],
+                    Some(body.as_ref()),
+
+                );
+                return Action::Pause;
             }
         }
-		let body: &str = &response_401_body();
-        // 未通过Basic认证或用户名密码不匹配，返回401 Unauthorized
-        self.send_http_response(
-            401,
-            vec![("WWW-Authenticate", "Basic realm=\"Registry Realm\""),("Docker-Distribution-Api-Version","registry/2.0"),("Content-Type","application/json; charset=utf-8")],
-            Some(body.as_ref()),
-
-        );
-        Action::Pause
+        return Action::Continue;
     }
 
     fn on_http_response_headers(&mut self, _: usize, _: bool) -> Action {
