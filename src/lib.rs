@@ -100,16 +100,6 @@ fn encode_basic_auth_credentials(username: &str, password: &str) -> String {
 
 // 定义基本认证函数
 fn response_401_body() -> String {
-    let json_data = r#"
-        {
-            "error": [
-                {
-                    "code": "UNAUTHORIZED",
-                    "detail": "",
-                    "message": "authentication required"
-                }
-            ]
-        }
-    "#;
+    let json_data = r#"{"errors":[{"code":"UNAUTHORIZED","message":"authentication required","detail":null}]}"#;
    return json_data.trim().to_string()
 }
