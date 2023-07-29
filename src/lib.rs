@@ -48,7 +48,7 @@ impl HttpContext for HttpHeaders {
                 }
             }
         }
-		let body = response_401_body();
+		let body: &str = &response_401_body();
         // 未通过Basic认证或用户名密码不匹配，返回401 Unauthorized
         self.send_http_response(
             401,
@@ -111,5 +111,5 @@ fn response_401_body() -> String {
             ]
         }
     "#;
-    json_data.parse().unwrap()
+   return json_data.trim().to_string()
 }
