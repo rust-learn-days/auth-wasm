@@ -9,3 +9,7 @@ registry:
   address: sealos.hub:5000
   username: admin
   password: passw0rd
+  auth: YWRtaW46cGFzc3cwcmQ=
+
+wasm:
+  image: wasm:latest

@@ -71,7 +71,10 @@ spec:
   selector:
     matchLabels:
       istio: ingressgateway
-  url: oci://sealos.hub:5000/oci/wasm-auth:v6
-  imagePullPolicy: Always
+  url: oci://{{.Values.registry.domain}}:{{.Values.registry.port}}/{{.Values.wasm.image}}
+  imagePullPolicy: IfNotPresent
   imagePullSecret: {{ include "registry-proxy.fullname" . }}
   phase: AUTHN
+  pluginConfig:
+    username: {{.Values.registry.username}}
+    password: {{.Values.registry.password}}
