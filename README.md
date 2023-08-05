@@ -129,27 +129,18 @@ spec:
 ```
 
 ### Wasm Plugin 与 Istio执行顺序
-                  +----------------+
-                  |ingress-gateway | 
-                  +----------------+
-                           |
-                           |    authn wasm plugins
-                           v
-                  +----------------+
-                  |   istio.authn   | 
-                  +----------------+
-                           |
-                           |    authz wasm plugins
-                           v
-                  +----------------+
-                  |  istio.authz   | 
-                  +----------------+
-                           |
-                           |    stats wasm plugins
-                           v
-                  +----------------+
-                  |  istio.stats   | 
-                  +----------------+
+```mermaid
+sequenceDiagram
+   participant gateway
+   participant istio.authn
+   participant istio.authz
+   participant istio.stats
+   participant router
+   gateway->>istio.authn: AUTHN wasm plugins
+   istio.authn->>istio.authz: AUTHZ wasm plugins
+   istio.authz->>istio.stats: STATS wasm plugins
+   istio.stats->>router: UNSPECIFIED_PHASE wasm plugins
+```
 
 在Istio中，Wasm插件（WasmPlugins）通过定义phase和priority来控制其在Istio代理中的执行顺序。这些参数决定了Wasm插件在代理的过滤器链中的位置，从而影响它们在请求处理过程中的顺序和优先级。
 
@@ -191,9 +182,257 @@ wget https://github.com/labring/sealos/releases/download/v4.3.0/sealos_4.3.0_lin
 tar -zxvf sealos_4.3.0_linux_amd64.tar.gz sealos
 chmod a+x sealos 
 mv sealos /usr/bin/
+sealos run labring/kubernetes-docker:v1.23.0 labring/helm:v3.12.0 labring/calico:v3.24.1
 ```
 
+### 部署 Istio
+
 ```shell
-sealos run labring/kubernetes-docker:v1.23.0 labring/helm:v3.12.0 labring/calico:v3.24.1
 sealos run labring/istio:1.16.2-min
 ```
+
+### 安装rust语言环境
+
+```shell
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+> 如果使用的国内环境，可以使用以下命令操作
+
+```shell
+export RUSTUP_DIST_SERVER="https://rsproxy.cn"
+export RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh
+cat > ~/.cargo/config <<EOF
+[source.crates-io]
+replace-with = 'rsproxy-sparse'
+[source.rsproxy]
+registry = "https://rsproxy.cn/crates.io-index"
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+[registries.rsproxy]
+index = "https://rsproxy.cn/crates.io-index"
+[net]
+git-fetch-with-cli = true
+EOF
+```
+
+### 初始化 rust wasm 项目
+
+#### 使用 JetBrains 插件
+
+打开Goland 并安装插件 Rust后创建项目
+
+1. 新增配置istio-wasm-rust模板: 
+> 填写模板地址: https://github.com/labring-actions/istio-wasm-template.git
+
+![](images/add-template.png)
+2. 新建项目选择istio-wasm-rust模板
+
+![](images/new-rust.png)
+
+#### 使用命令行
+
+```shell
+cargo install cargo-generate
+cargo generate --git https://github.com/labring-actions/istio-wasm-template.git --name my-project
+cd my-project
+```
+
+
+### 编译
+
+本地编译：
+
+```shell
+make build 
+```
+
+容器编译:
+```shell
+REPO=sealos.hub:5000 IMG=wasm/wasm-auth:latest make docker-build
+```
+
+### 部署
+
+#### 本地编译后部署
+
+```shell
+sealos login sealos.hub:5000
+REPO=sealos.hub:5000 IMG=wasm/wasm-auth:v1 make oci-build
+REPO=sealos.hub:5000 IMG=wasm/wasm-auth:latest make sealos-push
+sealos run sealos.hub:5000/wasm/wasm-auth:latest
+```
+
+#### 容器编译后部署
+
+```shell
+REPO=sealos.hub:5000 IMG=wasm/wasm-auth:latest make sealos-push
+sealos run sealos.hub:5000/wasm/wasm-auth:latest
+```
+
+### 验证部署
+
+```text
+kubectl get pod -n istio-system
+NAME                                    READY   STATUS    RESTARTS   AGE
+istio-ingressgateway-556959fc6f-prbbg   1/1     Running   0          4d15h
+istiod-5b9c4f9bf9-w6xns                 1/1     Running   0          4d15h
+
+kubectl logs -f -n istio-system istio-ingressgateway-556959fc6f-prbbg
+...
+2023-08-05T08:06:22.020843Z	info	wasm	fetching image wasm/wasm-auth from registry sealos.hub:5000 with tag v1
+2023-08-05T08:06:22.049991Z	info	wasm	fetching image with plain text from sealos.hub:5000/wasm/wasm-auth:v1
+
+```
+**默认过滤**: 默认配置是过滤的istio-ingressgateway的所有请求,如果需要调整，请调整wasmplugin的selector即可。
+
+**注意**: 默认是看不到wasm相关的日志,需要修改istio-ingressgateway的日志级别
+
+修改proxyComponentLogLevel为wasm:debug或者wasm:info会打印wasm里相关的日志
+
+```yaml
+  - proxy
+  - router
+  - --domain
+  - $(POD_NAMESPACE).svc.cluster.local
+  - --proxyLogLevel=warning
+  - --proxyComponentLogLevel=misc:error,wasm:debug
+  - --log_output_level=default:info,wasm:debug
+```
+再看日志，可以看到已经打印了默认配置
+```text
+2023-08-05T08:15:05.751195Z	debug	envoy wasm	wasm log: #on_configure -> {"password":"passw0rd","username":"admin"}
+2023-08-05T08:15:05.751208Z	debug	envoy wasm	~Wasm 12 remaining active
+2023-08-05T08:15:05.752986Z	debug	envoy wasm	wasm log: #on_configure -> {"password":"passw0rd","username":"admin"}
+2023-08-05T08:15:05.753243Z	debug	envoy wasm	wasm log: #on_configure -> {"password":"passw0rd","username":"admin"}
+2023-08-05T08:15:05.753372Z	debug	envoy wasm	wasm log: #on_configure -> {"password":"passw0rd","username":"admin"}
+```
+
+### rust sdk 说明
+
+> 这里讲解一下rust sdk的遇到的一些问题
+
+1. 如何获取pluginConfig的配置:
+
+```rust
+impl RootContext for HttpHeadersRoot {
+    fn get_type(&self) -> Option<ContextType> {
+        Some(ContextType::HttpContext)
+    }
+
+    fn create_http_context(&self, context_id: u32) -> Option<Box<dyn HttpContext>> {
+        Some(Box::new(HttpHeaders { context_id }))
+    }
+	//读取pluginConfig配置,直接解析json即可
+    fn on_configure(&mut self, _plugin_configuration_size: usize) -> bool {
+        if let Some(config_bytes) = self.get_plugin_configuration() {
+            if let Ok(config_str) = std::str::from_utf8(&config_bytes) {
+                debug!("#{} -> {}", "on_configure", config_str);
+            } else {
+                error!("Failed to convert configuration bytes to string");
+                return false;
+            }
+        }
+        true
+    }
+
+}
+```
+
+2. 如何获取http所有的请求头
+
+```rust
+fn on_http_response_headers(&mut self, _: usize, _: bool) -> Action {
+   for (name, value) in &self.get_http_response_headers() {
+      info!("#{} <- {}: {}", self.context_id, name, value);
+   }
+   Action::Continue
+}
+```
+
+3. 如何获取http的某个请求头
+
+```rust
+if let Some(path) = self.get_http_request_header(":path")  {
+    //TODO
+}
+```
+
+
+4. 如何强制修改header
+```rust
+self.set_http_request_header(key, value);
+```
+
+5. 如何终止请求并发送401请求
+
+```rust
+fn on_http_request_headers(&mut self, _: usize, _: bool) -> Action {
+     if let Some(path) = self.get_http_request_header(":path") {
+        self.send_http_response(
+           401,
+           sdk::headers(),
+           None,
+        );
+        return Action::Pause;
+     }
+     return Action::Continue;
+ }
+```
+
+6. 如何发送请求给其他服务，并解析请求返回
+
+参考代码: https://github.com/proxy-wasm/proxy-wasm-rust-sdk/blob/master/examples/http_auth_random/src/lib.rs
+
+> 这里需要说明一下，它其实是支持的wasm的enovy的负载均衡的请求，并不支持直接请求http服务。所以我们需要先获取当前集群所支持的服务列表，然后再发送请求
+
+找到你要查看istio的istio-ingressgateway pod名称
+
+```shell
+istioctl proxy-config clusters istio-ingressgateway-556959fc6f-prbbg.istio-system --fqdn sealos.hub -o yaml
+```
+
+找到其名字规则为 outbound|5000||sealos.hub 既:  DIRECTION|PORT||SERVICE_ALL_ADDR 
+
+
+
+```shell
+fn on_http_request_headers(&mut self, _: usize, _: bool) -> Action {
+  		let upstream = format!("outbound|{}||{}", 5000, "sealos.hub");
+        self.dispatch_http_call(
+            &upstream,
+            vec![
+                (":method", "GET"), //设置请求方式
+                (":path", "/bytes/1"), //设置请求路径
+                (":authority", "sealos.hub:5000"), //设置请求地址
+                (":scheme", "http"), 
+            ],
+            None,
+            vec![],
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        Action::Pause
+    }
+
+fn on_http_call_response(&mut self, _: u32, _: usize, body_size: usize, _: usize) {
+        if let Some(body) = self.get_http_call_response_body(0, body_size) {
+            if !body.is_empty() && body[0] % 2 == 0 {
+                info!("Access granted.");
+                self.resume_http_request();
+                return;
+            }
+        }
+        info!("Access forbidden.");
+        self.send_http_response(
+            403,
+            vec![("Powered-By", "proxy-wasm")],
+            Some(b"Access forbidden.\n"),
+        );
+    }
+    
+```
+
+说明一下,请求其他服务需要使用dispatch_http_call请求，因为是异步的并不会立即返回结果，而返回结果需要使用on_http_call_response进行接收；
+收到请求后如果需要通过执行结果，则直接调用self.resume_http_request();即可继续执行之前的数据。
