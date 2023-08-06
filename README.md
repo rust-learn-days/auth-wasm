@@ -2,7 +2,32 @@
 
 Istio引入了WebAssembly扩展的概念，允许开发者通过将自定义的WebAssembly模块插入Istio的Envoy代理来扩展Istio的功能。这为Istio带来了更高的灵活性和可扩展性，开发者可以在不改变Istio核心代码的情况下添加自定义功能。
 
-## WebAssembly在Istio中的应用场景
+## WebAssembly在Istio中的工作原理
+
+WebAssembly 是一种沙盒技术，可以用于扩展 Istio 代理（Envoy）的能力。 Proxy-Wasm 沙盒 API 取代了 Mixer 作为 Istio 主要的扩展机制。
+
+WebAssembly 沙盒的目标：
+
+- 效率 - 这是一种低延迟，低 CPU 和内存开销的扩展机制。
+- 功能 - 这是一种可以执行策略，收集遥测数据和执行有效荷载变更的扩展机制。
+- 隔离 - 一个插件中程序的错误或是崩溃不会影响其它插件。
+- 配置 - 插件使用与其它 Istio API 一致的 API 进行配置。可以动态的配置扩展。
+- 运维 - 扩展可以以仅日志，故障打开或者故障关闭的方式进行访问和部署。
+- 扩展开发者 - 可以用多种编程语言编写。
+
+### 高级架构
+
+Istio 扩展（Proxy-Wasm 插件）有几个组成部分：
+
+- 过滤器服务提供方接口（SPI） 用于为过滤器构建 Proxy-Wasm 插件。
+- 沙盒 在 Envoy 中嵌入 V8 Wasm 运行时。
+- 主机 API 用于处理请求头，尾和元数据。
+- 调出 API 针对 gRPC 和 HTTP 请求。
+- 统计和记录 API 用于度量统计和监控。
+
+![](images/extending.svg)
+
+### 应用场景
 
 - 自定义流量管理：开发者可以使用WebAssembly模块实现自定义的流量控制策略，如AB测试、灰度发布等。
 - 安全策略：通过WebAssembly模块，可以实现自定义的安全策略，例如访问控制、防火墙规则等。
